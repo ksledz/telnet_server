@@ -3,4 +3,4 @@ project(telnet_server)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(telnet_server main.cpp err.h cmake-build-debug/err.cpp)
+add_executable(telnet_server main.cpp err.h err.cpp)
