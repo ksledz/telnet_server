@@ -5,6 +5,7 @@
 #include <cstring>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 #include "err.h"
 
@@ -65,6 +66,34 @@ enum ClientState { a, b, end, b1, b2, back };
 enum Signal { up, down, enter, trash};
 enum Action {nothing, disconnect, A, B1, B2};
 
+
+class MenuOption {
+    std::string name;
+    TCPSocket* sock;
+public:
+    void react_to_signal () {
+
+    }
+
+
+};
+
+class UI {
+    std::vector<std::vector<MenuOption>> screens;
+    int which_menu;
+    int which_option;
+    TCPSocket* sock;
+public:
+    void print_menu () {
+
+    }
+    void react_to_signal () {
+
+    }
+};
+
+
+
 Signal what_signal (const char* buf, ssize_t len) {
     if (len < 2 || len > 3) return trash;
     if (len == 2 && buf[0] == 13 && buf[1] == 0) return enter;
@@ -74,40 +103,37 @@ Signal what_signal (const char* buf, ssize_t len) {
     }
     return trash;
 }
-void print_space(int sock, ClientState state, int i) {
-    ssize_t snd_len;
+void print_space(TCPSocket* sock, ClientState state, int i) {
     if (state == i) {
-        //sock.send("*");
-        snd_len = write(sock, "*", 1);
+        sock->send("*");
     } else {
-
-        snd_len = write(sock, " ", 1);
+        sock->send(" ");
     }
 }
-void print_menu(int msg_sock, ClientState state) {
-    ssize_t snd_len;
-    snd_len = write(msg_sock, "\033[2J",4); //clear
-    snd_len = write(msg_sock, "\033[H",3);
+void print_menu(TCPSocket* msg_sock, ClientState state) {
+
+    msg_sock->send("\033[2J");
+    msg_sock->send("\033[H");
     if (state < 3) {
         print_space(msg_sock, state, 0);
-        snd_len = write(msg_sock, "Opcja A\n", 8);
-        snd_len = write(msg_sock, "\033[9D", 4);
+        msg_sock->send("Opcja A\n");
+        msg_sock->send("\033[9D");
         print_space(msg_sock, state, 1);
-        snd_len = write(msg_sock, "Opcja B\n", 8);
-        snd_len = write(msg_sock, "\033[9D", 4);
+        msg_sock->send("Opcja B\n");
+        msg_sock->send("\033[9D");
         print_space(msg_sock, state, 2);
-        snd_len = write(msg_sock, "Koniec\n", 7);
-        snd_len = write(msg_sock, "\033[7D", 4);
+        msg_sock->send("Koniec\n");
+        msg_sock->send("\033[7D");
     } else {
         print_space(msg_sock, state, 3);
-        snd_len = write(msg_sock, "Opcja B1\n", 9);
-        snd_len = write(msg_sock, "\033[10D", 5);
+        msg_sock->send("Opcja B1\n");
+        msg_sock->send("\033[10D");
         print_space(msg_sock, state, 4);
-        snd_len = write(msg_sock, "Opcja B2\n", 9);
-        snd_len = write(msg_sock, "\033[10D", 5);
+        msg_sock->send("Opcja B2\n");
+        msg_sock->send("\033[10D");
         print_space(msg_sock, state, 5);
-        snd_len = write(msg_sock, "Wstecz\n", 7);
-        snd_len = write(msg_sock, "\033[7D", 4);
+        msg_sock->send("Wstecz\n");
+        msg_sock->send("\033[7D");
     }
 
 }
@@ -147,7 +173,6 @@ void change_state (Signal signal, ClientState* state, Action* action){
             }
             case b2: {
                 *action = B2;
-                //*mssg = "B2";
                 break;
             }
             case back: {
@@ -176,7 +201,7 @@ int main(int argc, char *argv[])
         Action action;
         tcpsocket.accept_connection();
         tcpsocket.send(clear_menu);
-        print_menu(tcpsocket.msg_sock, client);
+        print_menu(&tcpsocket, client);
 
         do {
             action = nothing;
@@ -186,7 +211,7 @@ int main(int argc, char *argv[])
             else {
                 change_state(what_signal(tcpsocket.buffer, tcpsocket.len), &client, &action);
 
-                print_menu(tcpsocket.msg_sock, client);
+                print_menu(&tcpsocket, client);
 
                 switch (action) {
                     case A:{
