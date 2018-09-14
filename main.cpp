@@ -14,7 +14,6 @@
 #define QUEUE_LENGTH 5
 
 
-
 std::string clear_menu = "\377\375\042\377\373\001";
 std::string back_1 = "\033[";
 std::string back_2 = "D";
@@ -34,7 +33,7 @@ public:
     char buffer[BUFFER_SIZE];
     ssize_t len, snd_len;
 
-    TCPSocket (uint16_t PORT_NUM) {
+    TCPSocket(uint16_t PORT_NUM) {
         sock = socket(PF_INET, SOCK_STREAM, 0); // creating IPv4 TCP socket
         if (sock < 0)
             syserr("socket");
@@ -54,24 +53,37 @@ public:
         if (msg_sock < 0)
             syserr("accept");
     }
-    void end_connection () {
+
+    void end_connection() {
         printf("ending connection\n");
         if (close(msg_sock) < 0) syserr("close");
     }
-    void send (const std::string &message) {
+
+    void send(const std::string &message) {
         write(msg_sock, message.c_str(), message.size());
     }
+
+    void receive() {
+        len = read(msg_sock, buffer, sizeof(buffer));
+        if (len < 0)
+            syserr("reading from client socket");
+    }
+
     ~TCPSocket() {
         if (close(sock) < 0) syserr("close");
     }
 };
 
 
-
-
-enum ClientState { a, b, end, b1, b2, back };
-enum Signal { up, down, enter, trash};
-enum Action {nothing, disconnect, A, B1, B2};
+enum ClientState {
+    a, b, end, b1, b2, back
+};
+enum Signal {
+    up, down, enter, trash
+};
+enum Action {
+    nothing, disconnect, A, B1, B2
+};
 
 
 class MenuOption {
@@ -79,10 +91,11 @@ class MenuOption {
     bool print;
     std::string printed;
     bool disconnect;
-    TCPSocket* sock;
+    TCPSocket *sock;
 public:
     std::string name;
-    int react_to_enter () {
+
+    int react_to_enter() {
         if (print) sock->send(printed);
         if (disconnect) sock->end_connection();
         return move;
@@ -96,9 +109,9 @@ class UI {
     std::vector<std::vector<MenuOption>> screens;
     int menu;
     int option;
-    TCPSocket* sock;
+    TCPSocket *sock;
 public:
-    void print_menu () {
+    void print_menu() {
         int i = 0;
         for (auto moption: screens[menu]) {
             if (i == option) {
@@ -109,8 +122,9 @@ public:
             sock->send(print_with_enter(moption.name));
         }
     }
-    void react_to_signal (Signal signal) {
-        switch(signal) {
+
+    void react_to_signal(Signal signal) {
+        switch (signal) {
             case up: {
                 option++;
                 if (option == screens[menu].size()) option = 0;
@@ -130,7 +144,8 @@ public:
                 }
 
             }
-            case trash: break;
+            case trash:
+                break;
 
         }
 
@@ -138,8 +153,7 @@ public:
 };
 
 
-
-Signal what_signal (const char* buf, ssize_t len) {
+Signal what_signal(const char *buf, ssize_t len) {
     if (len < 2 || len > 3) return trash;
     if (len == 2 && buf[0] == 13 && buf[1] == 0) return enter;
     if (len == 3 && buf[0] == 27 && buf[1] == 91) {
@@ -148,14 +162,16 @@ Signal what_signal (const char* buf, ssize_t len) {
     }
     return trash;
 }
-void print_space(TCPSocket* sock, ClientState state, int i) {
+
+void print_space(TCPSocket *sock, ClientState state, int i) {
     if (state == i) {
         sock->send("*");
     } else {
         sock->send(" ");
     }
 }
-void print_menu(TCPSocket* msg_sock, ClientState state) {
+
+void print_menu(TCPSocket *msg_sock, ClientState state) {
 
     msg_sock->send("\033[2J");
     msg_sock->send("\033[H");
@@ -177,7 +193,8 @@ void print_menu(TCPSocket* msg_sock, ClientState state) {
     }
 
 }
-void change_state (Signal signal, ClientState* state, Action* action){
+
+void change_state(Signal signal, ClientState *state, Action *action) {
     int temp_s = *state;
     bool menu2 = false;
     if (*state >= 3) menu2 = true;
@@ -186,15 +203,15 @@ void change_state (Signal signal, ClientState* state, Action* action){
         temp_s++;
     }
     if (signal == up) {
-        temp_s+=2;
+        temp_s += 2;
     }
     if (signal < 2) {
-        temp_s%=3;
-        if (menu2) temp_s+=3;
+        temp_s %= 3;
+        if (menu2) temp_s += 3;
     }
     (*state) = static_cast<ClientState>(temp_s);
     if (signal == enter) {
-        switch(*state) {
+        switch (*state) {
             case a: {
                 *action = A;
                 break;
@@ -222,17 +239,16 @@ void change_state (Signal signal, ClientState* state, Action* action){
         }
     }
 }
-int main(int argc, char *argv[])
-{
+
+int main(int argc, char *argv[]) {
     if (argc != 2) {
         fatal("Usage: %s host port message ...\n", argv[0]);
     }
-    char* p_end;
+    char *p_end;
 
     auto PORT_NUM = static_cast<uint16_t>(strtol(argv[1], &p_end, 10));
     if (*p_end != '\0') syserr("bad argument");
     TCPSocket tcpsocket(PORT_NUM);
-
 
 
     for (;;) {
@@ -244,36 +260,33 @@ int main(int argc, char *argv[])
 
         do {
             action = nothing;
-            tcpsocket.len = read(tcpsocket.msg_sock, tcpsocket.buffer, sizeof(tcpsocket.buffer));
-            if (tcpsocket.len < 0)
-                syserr("reading from client socket");
-            else {
-                change_state(what_signal(tcpsocket.buffer, tcpsocket.len), &client, &action);
+            tcpsocket.receive();
+            change_state(what_signal(tcpsocket.buffer, tcpsocket.len), &client, &action);
 
-                print_menu(&tcpsocket, client);
+            print_menu(&tcpsocket, client);
 
-                switch (action) {
-                    case A:{
-                        tcpsocket.send("A");
-                        break;
-                    }
-                    case B1: {
-                        tcpsocket.send("B1");
-                        break;
-                    }
-                    case B2: {
-                        tcpsocket.send("B2");
-                        break;
-                    }
-                    case disconnect:{
-                        tcpsocket.len = -1;
-                        break;
-                    }
-                    case nothing: {
-                        break;
-                    }
+            switch (action) {
+                case A: {
+                    tcpsocket.send("A");
+                    break;
+                }
+                case B1: {
+                    tcpsocket.send("B1");
+                    break;
+                }
+                case B2: {
+                    tcpsocket.send("B2");
+                    break;
+                }
+                case disconnect: {
+                    tcpsocket.len = -1;
+                    break;
+                }
+                case nothing: {
+                    break;
                 }
             }
+
         } while (tcpsocket.len > 0);
         tcpsocket.end_connection();
     }
