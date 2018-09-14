@@ -6,6 +6,7 @@
 #include <string>
 #include <unistd.h>
 #include <vector>
+#include <sstream>
 
 #include "err.h"
 
@@ -15,8 +16,14 @@
 
 
 std::string clear_menu = "\377\375\042\377\373\001";
+std::string back_1 = "\033[";
+std::string back_2 = "D";
 
-
+std::string print_with_enter(std::string s) {
+    std::stringstream ss;
+    ss << s << "\n" << back_1 << (s.size() + 2) << back_2;
+    return ss.str();
+}
 
 class TCPSocket {
 public:
@@ -68,10 +75,17 @@ enum Action {nothing, disconnect, A, B1, B2};
 
 
 class MenuOption {
-    std::string name;
+    int move;
+    bool print;
+    std::string printed;
+    bool disconnect;
     TCPSocket* sock;
 public:
-    void react_to_signal () {
+    std::string name;
+    int react_to_enter () {
+        if (print) sock->send(printed);
+        if (disconnect) sock->end_connection();
+        return move;
 
     }
 
@@ -80,14 +94,45 @@ public:
 
 class UI {
     std::vector<std::vector<MenuOption>> screens;
-    int which_menu;
-    int which_option;
+    int menu;
+    int option;
     TCPSocket* sock;
 public:
     void print_menu () {
-
+        int i = 0;
+        for (auto moption: screens[menu]) {
+            if (i == option) {
+                sock->send("*");
+            } else {
+                sock->send(" ");
+            }
+            sock->send(print_with_enter(moption.name));
+        }
     }
-    void react_to_signal () {
+    void react_to_signal (Signal signal) {
+        switch(signal) {
+            case up: {
+                option++;
+                if (option == screens[menu].size()) option = 0;
+                print_menu();
+            }
+            case down: {
+                option--;
+                if (option == -1) option += screens[menu].size();
+                print_menu();
+            }
+            case enter: {
+                int move = screens[menu][option].react_to_enter();
+                if (move != 0) {
+                    menu += (move + screens.size());
+                    menu %= screens.size();
+                    print_menu();
+                }
+
+            }
+            case trash: break;
+
+        }
 
     }
 };
@@ -116,24 +161,19 @@ void print_menu(TCPSocket* msg_sock, ClientState state) {
     msg_sock->send("\033[H");
     if (state < 3) {
         print_space(msg_sock, state, 0);
-        msg_sock->send("Opcja A\n");
-        msg_sock->send("\033[9D");
+        msg_sock->send(print_with_enter("Opcja A"));
         print_space(msg_sock, state, 1);
-        msg_sock->send("Opcja B\n");
-        msg_sock->send("\033[9D");
+        msg_sock->send(print_with_enter("Opcja B"));
         print_space(msg_sock, state, 2);
-        msg_sock->send("Koniec\n");
-        msg_sock->send("\033[7D");
+        msg_sock->send(print_with_enter("Koniec"));
+
     } else {
         print_space(msg_sock, state, 3);
-        msg_sock->send("Opcja B1\n");
-        msg_sock->send("\033[10D");
+        msg_sock->send(print_with_enter("Opcja B1"));
         print_space(msg_sock, state, 4);
-        msg_sock->send("Opcja B2\n");
-        msg_sock->send("\033[10D");
+        msg_sock->send(print_with_enter("Opcja B2"));
         print_space(msg_sock, state, 5);
-        msg_sock->send("Wstecz\n");
-        msg_sock->send("\033[7D");
+        msg_sock->send(print_with_enter("Wstecz"));
     }
 
 }
@@ -191,7 +231,6 @@ int main(int argc, char *argv[])
 
     auto PORT_NUM = static_cast<uint16_t>(strtol(argv[1], &p_end, 10));
     if (*p_end != '\0') syserr("bad argument");
-    //char *clearmagic = "\033[2J\033H";
     TCPSocket tcpsocket(PORT_NUM);
 
 
