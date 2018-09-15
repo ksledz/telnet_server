@@ -1,3 +1,5 @@
+#include <utility>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -18,7 +20,17 @@ std::string clear_menu = "\377\375\042\377\373\001";
 std::string back_1 = "\033[";
 std::string back_2 = "D";
 
-std::string print_with_enter(std::string s) {
+enum ClientState {
+    a, b, end, b1, b2, back
+};
+enum Signal {
+    up, down, enter, trash
+};
+enum Action {
+    nothing, disconnect, A, B1, B2
+};
+
+std::string print_with_enter(const std::string &s) {
     std::stringstream ss;
     ss << s << "\n" << back_1 << (s.size() + 2) << back_2;
     return ss.str();
@@ -69,26 +81,27 @@ public:
             syserr("reading from client socket");
     }
 
+    Signal receive_signal() {
+        receive();
+        if (len < 2 || len > 3) return trash;
+        if (len == 2 && buffer[0] == 13 && buffer[1] == 0) return enter;
+        if (len == 3 && buffer[0] == 27 && buffer[1] == 91) {
+            if (buffer[2] == 65) return up;
+            if (buffer[2] == 66) return down;
+        }
+        return trash;
+    }
+
     ~TCPSocket() {
         if (close(sock) < 0) syserr("close");
     }
 };
 
 
-enum ClientState {
-    a, b, end, b1, b2, back
-};
-enum Signal {
-    up, down, enter, trash
-};
-enum Action {
-    nothing, disconnect, A, B1, B2
-};
 
 
 class MenuOption {
     int move;
-    bool print;
     std::string printed;
     bool disconnect;
     TCPSocket *sock;
@@ -96,11 +109,17 @@ public:
     std::string name;
 
     int react_to_enter() {
-        if (print) sock->send(printed);
+        if (!printed.empty()) sock->send(printed);
         if (disconnect) sock->end_connection();
         return move;
 
     }
+    MenuOption (int move = 0, std::string printed = "", bool disconnect = false, TCPSocket* sock) :
+    move(move),
+    printed(std::move(printed)),
+    disconnect(disconnect),
+    sock(sock) {}
+
 
 
 };
@@ -260,8 +279,8 @@ int main(int argc, char *argv[]) {
 
         do {
             action = nothing;
-            tcpsocket.receive();
-            change_state(what_signal(tcpsocket.buffer, tcpsocket.len), &client, &action);
+            //tcpsocket.receive();
+            change_state(tcpsocket.receive_signal(), &client, &action);
 
             print_menu(&tcpsocket, client);
 
