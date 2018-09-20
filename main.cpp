@@ -1,5 +1,7 @@
 #include <utility>
 
+#include <utility>
+
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -44,8 +46,10 @@ public:
     socklen_t client_address_len;
     char buffer[BUFFER_SIZE];
     ssize_t len, snd_len;
+    bool connected;
 
     TCPSocket(uint16_t PORT_NUM) {
+        connected = false;
         sock = socket(PF_INET, SOCK_STREAM, 0); // creating IPv4 TCP socket
         if (sock < 0)
             syserr("socket");
@@ -60,6 +64,7 @@ public:
     }
 
     void accept_connection() {
+        connected = true;
         client_address_len = sizeof(client_address);
         msg_sock = accept(sock, (struct sockaddr *) &client_address, &client_address_len);
         if (msg_sock < 0)
@@ -69,6 +74,7 @@ public:
     void end_connection() {
         printf("ending connection\n");
         if (close(msg_sock) < 0) syserr("close");
+        connected = false;
     }
 
     void send(const std::string &message) {
@@ -114,10 +120,11 @@ public:
         return move;
 
     }
-    MenuOption (int move = 0, std::string printed = "", bool disconnect = false, TCPSocket* sock) :
+    MenuOption (std::string name, int move = 0, std::string printed = "", bool disconnect = false, TCPSocket* sock = NULL) :
     move(move),
     printed(std::move(printed)),
     disconnect(disconnect),
+    name(std::move(name)),
     sock(sock) {}
 
 
@@ -130,7 +137,27 @@ class UI {
     int option;
     TCPSocket *sock;
 public:
+    UI (unsigned long screen_number, TCPSocket* sock) :
+    sock(sock),
+    menu(0),
+    option(0)
+    {
+        screens.resize(screen_number);
+    }
+
+    int add_option(unsigned long screen_number, const MenuOption &option) {
+        if (screen_number > screens.size()) return 1;
+        screens[screen_number].push_back(option);
+    }
+
+    void reset_menu() {
+        menu = 0;
+        option = 0;
+    }
     void print_menu() {
+        //sock->send(clear_menu);
+        sock->send("\033[2J");
+        sock->send("\033[H");
         int i = 0;
         for (auto moption: screens[menu]) {
             if (i == option) {
@@ -139,28 +166,33 @@ public:
                 sock->send(" ");
             }
             sock->send(print_with_enter(moption.name));
+            i++;
         }
     }
 
     void react_to_signal(Signal signal) {
         switch (signal) {
-            case up: {
+            case down: {
                 option++;
                 if (option == screens[menu].size()) option = 0;
                 print_menu();
+                break;
             }
-            case down: {
+            case up: {
                 option--;
                 if (option == -1) option += screens[menu].size();
                 print_menu();
+                break;
             }
             case enter: {
                 int move = screens[menu][option].react_to_enter();
                 if (move != 0) {
                     menu += (move + screens.size());
                     menu %= screens.size();
+                    option = 0;
                     print_menu();
                 }
+                break;
 
             }
             case trash:
@@ -268,17 +300,26 @@ int main(int argc, char *argv[]) {
     auto PORT_NUM = static_cast<uint16_t>(strtol(argv[1], &p_end, 10));
     if (*p_end != '\0') syserr("bad argument");
     TCPSocket tcpsocket(PORT_NUM);
-
+    UI ui(2, &tcpsocket);
+    ui.add_option(0, MenuOption("Opcja A", 0, "A", false, &tcpsocket));
+    ui.add_option(0, MenuOption("Opcja B", 1, "", false, &tcpsocket));
+    ui.add_option(0, MenuOption("Koniec", 0, "", true, &tcpsocket));
+    ui.add_option(1, MenuOption("Opcja B1", 0, "B1", false, &tcpsocket));
+    ui.add_option(1, MenuOption("Opcja B2", 0, "B2", false, &tcpsocket));
+    ui.add_option(1, MenuOption("Wstecz", -1, "", false, &tcpsocket));
 
     for (;;) {
         ClientState client = a;
         Action action;
         tcpsocket.accept_connection();
         tcpsocket.send(clear_menu);
-        print_menu(&tcpsocket, client);
+        //print_menu(&tcpsocket, client);
+        ui.reset_menu();
+        ui.print_menu();
 
         do {
-            action = nothing;
+            ui.react_to_signal(tcpsocket.receive_signal());
+            /*action = nothing;
             //tcpsocket.receive();
             change_state(tcpsocket.receive_signal(), &client, &action);
 
@@ -304,10 +345,10 @@ int main(int argc, char *argv[]) {
                 case nothing: {
                     break;
                 }
-            }
+            }*/
 
-        } while (tcpsocket.len > 0);
-        tcpsocket.end_connection();
+        } while (tcpsocket.connected);
+        //tcpsocket.end_connection();
     }
     return 0;
 }
