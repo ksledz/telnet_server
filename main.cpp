@@ -1,16 +1,12 @@
-#include <utility>
-
-#include <utility>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <cstdio>
-#include <cstring>
-#include <string>
 #include <unistd.h>
+#include <cstdio>
+#include <string>
 #include <vector>
 #include <sstream>
+#include <utility>
 
 #include "err.h"
 
@@ -99,29 +95,25 @@ public:
 };
 
 
-
-
 class MenuOption {
     int move;
     std::string printed;
     bool disconnect;
-    TCPSocket *sock;
 public:
     std::string name;
 
-    int react_to_enter() {
+    int react_to_enter(TCPSocket *sock) {
         if (!printed.empty()) sock->send(printed);
         if (disconnect) sock->end_connection();
         return move;
 
     }
 
-    MenuOption (std::string name, int move = 0, std::string printed = "", bool disconnect = false, TCPSocket* sock = nullptr) :
-    move(move),
-    printed(std::move(printed)),
-    disconnect(disconnect),
-    name(std::move(name)),
-    sock(sock) {}
+    MenuOption(std::string name, std::string printed, int move = 0, bool disconnect = false) :
+            move(move),
+            printed(std::move(printed)),
+            disconnect(disconnect),
+            name(std::move(name)){}
 
 };
 
@@ -131,11 +123,10 @@ class UI {
     int option;
     TCPSocket *sock;
 public:
-    UI (unsigned long screen_number, TCPSocket* sock) :
-    sock(sock),
-    menu(0),
-    option(0)
-    {
+    UI(unsigned long screen_number, TCPSocket *sock) :
+            sock(sock),
+            menu(0),
+            option(0) {
         screens.resize(screen_number);
     }
 
@@ -152,14 +143,9 @@ public:
 
     void print_menu() {
         sock->send(CLEAR_SCREEN);
-
         int i = 0;
         for (auto moption: screens[menu]) {
-            if (i == option) {
-                sock->send("*");
-            } else {
-                sock->send(" ");
-            }
+            sock->send((i == option) ? "*" : " ");
             sock->send(print_with_enter(moption.name));
             i++;
         }
@@ -180,7 +166,7 @@ public:
                 break;
             }
             case enter: {
-                int move = screens[menu][option].react_to_enter();
+                int move = screens[menu][option].react_to_enter(sock);
                 if (move != 0) {
                     menu += (move + screens.size());
                     menu %= screens.size();
@@ -188,7 +174,6 @@ public:
                     print_menu();
                 }
                 break;
-
             }
             case trash:
                 break;
@@ -199,10 +184,6 @@ public:
 };
 
 
-
-
-
-
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         fatal("Usage: %s host port message ...\n", argv[0]);
@@ -210,15 +191,15 @@ int main(int argc, char *argv[]) {
     char *p_end;
 
     auto PORT_NUM = static_cast<uint16_t>(strtol(argv[1], &p_end, 10));
-    if (*p_end != '\0') syserr("bad argument");
+    if (*p_end != '\0') syserr("bad argument format");
     TCPSocket tcpsocket(PORT_NUM);
     UI ui(2, &tcpsocket);
-    ui.add_option(0, MenuOption("Opcja A", 0, "A", false, &tcpsocket));
-    ui.add_option(0, MenuOption("Opcja B", 1, "", false, &tcpsocket));
-    ui.add_option(0, MenuOption("Koniec", 0, "", true, &tcpsocket));
-    ui.add_option(1, MenuOption("Opcja B1", 0, "B1", false, &tcpsocket));
-    ui.add_option(1, MenuOption("Opcja B2", 0, "B2", false, &tcpsocket));
-    ui.add_option(1, MenuOption("Wstecz", -1, "", false, &tcpsocket));
+    ui.add_option(0, MenuOption("Opcja A", "A"));
+    ui.add_option(0, MenuOption("Opcja B", "", 1));
+    ui.add_option(0, MenuOption("Koniec", "", 0, true));
+    ui.add_option(1, MenuOption("Opcja B1", "B1"));
+    ui.add_option(1, MenuOption("Opcja B2", "B2"));
+    ui.add_option(1, MenuOption("Wstecz", "", -1));
 
     for (;;) {
 
