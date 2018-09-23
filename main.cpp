@@ -55,15 +55,17 @@ public:
     }
 
     void accept_connection() {
-        connected = true;
+
         client_address_len = sizeof(client_address);
         msg_sock = accept(sock, (struct sockaddr *) &client_address, &client_address_len);
         if (msg_sock < 0)
             syserr("accept");
+        connected = true;
+        printf("establishing connection with client \n");
     }
 
     void end_connection() {
-        printf("ending connection\n");
+        printf("ending connection with client\n");
         if (close(msg_sock) < 0) syserr("close");
         connected = false;
     }
@@ -194,12 +196,12 @@ int main(int argc, char *argv[]) {
     if (*p_end != '\0') syserr("bad argument format");
     TCPSocket tcpsocket(PORT_NUM);
     UI ui(2, &tcpsocket);
-    ui.add_option(0, MenuOption("Opcja A", "A"));
-    ui.add_option(0, MenuOption("Opcja B", "", 1));
-    ui.add_option(0, MenuOption("Koniec", "", 0, true));
-    ui.add_option(1, MenuOption("Opcja B1", "B1"));
-    ui.add_option(1, MenuOption("Opcja B2", "B2"));
-    ui.add_option(1, MenuOption("Wstecz", "", -1));
+    ui.add_option(0, MenuOption("Option A", "A"));
+    ui.add_option(0, MenuOption("Option B", "", 1));
+    ui.add_option(0, MenuOption("End", "", 0, true));
+    ui.add_option(1, MenuOption("Option B1", "B1"));
+    ui.add_option(1, MenuOption("Option B2", "B2"));
+    ui.add_option(1, MenuOption("Back", "", -1));
 
     for (;;) {
 
